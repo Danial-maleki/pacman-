@@ -3,5 +3,5 @@
 .jetbrains/
 
 # Debug
-pacman/x64/Debug
-x64/Debug
+pacman/x64/Debug/
+x64/Debug/
