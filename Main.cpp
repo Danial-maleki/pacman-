@@ -15,6 +15,36 @@ typedef struct {
     Texture2D texture;
 } Enemy;
 
+#define PLAYER_SPEED 2.0f
+#define ENEMY_SPEED 2.0f
+
+void handlePlayerMovement(Vector2* logoPosition, Texture2D* currentTexture, Texture2D textureW, Texture2D textureA, Texture2D textureS, Texture2D textureD) {
+    if (IsKeyDown(KEY_A) && logoPosition->x > 0) {
+        logoPosition->x -= PLAYER_SPEED;
+        *currentTexture = textureA;
+    }
+    if (IsKeyDown(KEY_D) && logoPosition->x < (TILE_COUNT_X - 1) * TILE_SIZE) {
+        logoPosition->x += PLAYER_SPEED;
+        *currentTexture = textureD;
+    }
+    if (IsKeyDown(KEY_S) && logoPosition->y < (TILE_COUNT_Y - 1) * TILE_SIZE) {
+        logoPosition->y += PLAYER_SPEED;
+        *currentTexture = textureS;
+    }
+    if (IsKeyDown(KEY_W) && logoPosition->y > 0) {
+        logoPosition->y -= PLAYER_SPEED;
+        *currentTexture = textureW;
+    }
+}
+
+void handleEnemyMovement(Enemy* enemy, Vector2* enemyDirection) {
+    enemy->position.x += enemyDirection->x * ENEMY_SPEED;
+    enemy->position.y += enemyDirection->y * ENEMY_SPEED;
+
+    if (enemy->position.x <= 0 || enemy->position.x >= (TILE_COUNT_X - 1) * TILE_SIZE) enemyDirection->x *= -1.0f;
+    if (enemy->position.y <= 0 || enemy->position.y >= (TILE_COUNT_Y - 1) * TILE_SIZE) enemyDirection->y *= -1.0f;
+}
+
 int main() {
     InitWindow(800, 600, "Pacman");
 
@@ -49,27 +79,11 @@ int main() {
     int itemCount = sizeof(items) / sizeof(Item);
 
     Enemy enemy = {{10 * TILE_SIZE, 10 * TILE_SIZE}, textureD};
-
     Vector2 enemyDirection = {-1.0f, 0.0f};
     int score = 0;
 
     while (!WindowShouldClose()) {
-        if (IsKeyDown(KEY_A) && logoPosition.x > 0) {
-            logoPosition.x -= 2.0f;
-            currentTexture = textureA;
-        }
-        if (IsKeyDown(KEY_D) && logoPosition.x < (TILE_COUNT_X - 1) * TILE_SIZE) {
-            logoPosition.x += 2.0f;
-            currentTexture = textureD;
-        }
-        if (IsKeyDown(KEY_S) && logoPosition.y < (TILE_COUNT_Y - 1) * TILE_SIZE) {
-            logoPosition.y += 2.0f;
-            currentTexture = textureS;
-        }
-        if (IsKeyDown(KEY_W) && logoPosition.y > 0) {
-            logoPosition.y -= 2.0f;
-            currentTexture = textureW;
-        }
+        handlePlayerMovement(&logoPosition, &currentTexture, textureW, textureA, textureS, textureD);
 
         for (int i = 0; i < itemCount; i++) {
             if (!items[i].collected && CheckCollisionRecs(
@@ -81,14 +95,10 @@ int main() {
             }
         }
 
-        enemy.position.x += enemyDirection.x * 2.0f;
-        enemy.position.y += enemyDirection.y * 2.0f;
-
-        if (enemy.position.x <= 0 || enemy.position.x >= (TILE_COUNT_X - 1) * TILE_SIZE) enemyDirection.x *= -1.0f;
-        if (enemy.position.y <= 0 || enemy.position.y >= (TILE_COUNT_Y - 1) * TILE_SIZE) enemyDirection.y *= -1.0f;
+        handleEnemyMovement(&enemy, &enemyDirection);
 
         BeginDrawing();
-        ClearBackground(Color{40, 40, 40, 255});
+        ClearBackground((Color){40, 40, 40, 255});
 
         for (int y = 0; y < TILE_COUNT_Y; y++) {
             for (int x = 0; x < TILE_COUNT_X; x++) {
