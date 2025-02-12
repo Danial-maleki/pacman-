@@ -1,0 +1,7 @@
+# IDE
+.vscode/
+.jetbrains/
+
+# Debug
+pacman/x64/Debug
+x64/Debug
