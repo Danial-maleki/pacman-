@@ -4,4 +4,11 @@
 
 # Debug
 pacman/x64/Debug/
-x64/Debug/
+x64/
+build/Debug/
+
+# Trash Build
+a.out
+
+# Builder Scripts
+build.bash
