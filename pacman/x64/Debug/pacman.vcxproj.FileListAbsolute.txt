@@ -1,3 +1,0 @@
-D:\cpp project\pacman\x64\Debug\raylib.dll
-D:\cpp project\pacman\x64\Debug\glfw3.dll
-D:\cpp project\pacman\pacman\x64\Debug\pacman.vcxproj.Up2Date
