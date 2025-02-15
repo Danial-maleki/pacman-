@@ -1,6 +1,0 @@
-﻿  Main.cpp
-D:\cpp project\pacman\Main.cpp(59,65): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
-D:\cpp project\pacman\Main.cpp(59,49): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
-  pacman.vcxproj -> D:\cpp project\pacman\x64\Debug\pacman.exe
-  'pwsh.exe' is not recognized as an internal or external command,
-  operable program or batch file.
