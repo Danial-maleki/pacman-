@@ -1,133 +1,297 @@
-#include "raylib.h"
-#include <stdio.h>
+#include <raylib.h>
+#include <raymath.h>
+#include <vector>
+#include <memory>
+#include <fstream>
+#include <algorithm>
 
-#define TILE_SIZE 40
-#define TILE_COUNT_X 20
-#define TILE_COUNT_Y 15
+constexpr int TILE_SIZE = 40;
+constexpr int TILE_COUNT_X = 20;
+constexpr int TILE_COUNT_Y = 15;
+constexpr int MAX_PARTICLES = 100;
 
-typedef struct {
-    Vector2 position;
-    bool collected;
-} Item;
+enum class GameState { MENU, PLAYING, PAUSED, GAME_OVER, SHOP };
+enum class PlayerState { NORMAL, SPEED_BOOST, INVINCIBLE, FROZEN };
 
-typedef struct {
+class GameObject {
+protected:
     Vector2 position;
     Texture2D texture;
-} Enemy;
+public:
+    virtual void Update() = 0;
+    virtual void Draw() const = 0;
+    virtual ~GameObject() = default;
+};
 
-#define PLAYER_SPEED 2.0f
-#define ENEMY_SPEED 2.0f
-
-void handlePlayerMovement(Vector2* logoPosition, Texture2D* currentTexture, Texture2D textureW, Texture2D textureA, Texture2D textureS, Texture2D textureD) {
-    if (IsKeyDown(KEY_A) && logoPosition->x > 0) {
-        logoPosition->x -= PLAYER_SPEED;
-        *currentTexture = textureA;
-    }
-    if (IsKeyDown(KEY_D) && logoPosition->x < (TILE_COUNT_X - 1) * TILE_SIZE) {
-        logoPosition->x += PLAYER_SPEED;
-        *currentTexture = textureD;
-    }
-    if (IsKeyDown(KEY_S) && logoPosition->y < (TILE_COUNT_Y - 1) * TILE_SIZE) {
-        logoPosition->y += PLAYER_SPEED;
-        *currentTexture = textureS;
-    }
-    if (IsKeyDown(KEY_W) && logoPosition->y > 0) {
-        logoPosition->y -= PLAYER_SPEED;
-        *currentTexture = textureW;
-    }
-}
-
-void handleEnemyMovement(Enemy* enemy, Vector2* enemyDirection) {
-    enemy->position.x += enemyDirection->x * ENEMY_SPEED;
-    enemy->position.y += enemyDirection->y * ENEMY_SPEED;
-
-    if (enemy->position.x <= 0 || enemy->position.x >= (TILE_COUNT_X - 1) * TILE_SIZE) enemyDirection->x *= -1.0f;
-    if (enemy->position.y <= 0 || enemy->position.y >= (TILE_COUNT_Y - 1) * TILE_SIZE) enemyDirection->y *= -1.0f;
-}
-
-int main() {
-    InitWindow(800, 600, "Pacman");
-
-    SetTargetFPS(60);
-
-    Image spriteW = LoadImage("assets/pacman_w.png");
-    Image spriteA = LoadImage("assets/pacman_a.png");
-    Image spriteS = LoadImage("assets/pacman_s.png");
-    Image spriteD = LoadImage("assets/pacman_d.png");
-
-    Texture2D textureW = LoadTextureFromImage(spriteW);
-    Texture2D textureA = LoadTextureFromImage(spriteA);
-    Texture2D textureS = LoadTextureFromImage(spriteS);
-    Texture2D textureD = LoadTextureFromImage(spriteD);
-
-    UnloadImage(spriteW);
-    UnloadImage(spriteA);
-    UnloadImage(spriteS);
-    UnloadImage(spriteD);
-
-    Sound collectSound = LoadSound("assets/collect.wav");
-    Sound hitSound = LoadSound("assets/hit.wav");
-
-    Vector2 logoPosition = {(float)(GetScreenWidth() - textureW.width) / 2, (float)(GetScreenHeight() - textureW.height) / 2};
-    Texture2D currentTexture = textureW;
-
-    Item items[] = {
-        {{2 * TILE_SIZE, 2 * TILE_SIZE}, false},
-        {{5 * TILE_SIZE, 5 * TILE_SIZE}, false},
-        {{8 * TILE_SIZE, 8 * TILE_SIZE}, false}
+class ParticleSystem {
+    struct Particle {
+        Vector2 position;
+        Color color;
+        float alpha;
+        float size;
+        Vector2 velocity;
     };
-    int itemCount = sizeof(items) / sizeof(Item);
 
-    Enemy enemy = {{10 * TILE_SIZE, 10 * TILE_SIZE}, textureD};
-    Vector2 enemyDirection = {-1.0f, 0.0f};
+    std::vector<Particle> particles;
+public:
+    void Spawn(Vector2 position, int count) {
+        for(int i = 0; i < count; i++) {
+            particles.push_back({
+                position,
+                Color{static_cast<unsigned char>(GetRandomValue(200,255)),
+                      static_cast<unsigned char>(GetRandomValue(100,200)), 0, 255},
+                1.0f,
+                static_cast<float>(GetRandomValue(2,8)),
+                Vector2{static_cast<float>(GetRandomValue(-50,50))/10.0f,
+                        static_cast<float>(GetRandomValue(-50,50))/10.0f}
+            });
+        }
+    }
+
+    void Update() {
+        particles.erase(std::remove_if(particles.begin(), particles.end(), 
+            [](const Particle& p) { return p.alpha <= 0; }), particles.end());
+
+        for(auto& p : particles) {
+            p.position = Vector2Add(p.position, p.velocity);
+            p.alpha -= 0.02f;
+            p.size *= 0.98f;
+        }
+    }
+
+    void Draw() const {
+        for(const auto& p : particles) {
+            DrawCircleV(p.position, p.size, Fade(p.color, p.alpha));
+        }
+    }
+};
+
+class Player : public GameObject {
+    Rectangle frameRec;
+    int currentFrame = 0;
+    int framesCounter = 0;
+    PlayerState state = PlayerState::NORMAL;
+    float speed = 2.0f;
+    float powerUpTimer = 0.0f;
+    int coins = 0;
     int score = 0;
+    int lives = 3;
 
-    while (!WindowShouldClose()) {
-        handlePlayerMovement(&logoPosition, &currentTexture, textureW, textureA, textureS, textureD);
+public:
+    Player(Vector2 startPos, Texture2D tex) {
+        position = startPos;
+        texture = tex;
+        frameRec = {0, 0, 32, 32};
+    }
 
-        for (int i = 0; i < itemCount; i++) {
-            if (!items[i].collected && CheckCollisionRecs(
-                (Rectangle){logoPosition.x, logoPosition.y, textureW.width, textureW.height},
-                (Rectangle){items[i].position.x, items[i].position.y, TILE_SIZE, TILE_SIZE})) {
-                items[i].collected = true;
-                score += 10;
-                PlaySound(collectSound);
-            }
+    void Update() override {
+        if(IsKeyDown(KEY_D)) position.x += speed;
+        if(IsKeyDown(KEY_A)) position.x -= speed;
+        if(IsKeyDown(KEY_W)) position.y -= speed;
+        if(IsKeyDown(KEY_S)) position.y += speed;
+
+        // Animation logic
+        if(++framesCounter >= 8) {
+            currentFrame = (currentFrame + 1) % 4;
+            frameRec.x = currentFrame * 32;
+            framesCounter = 0;
         }
 
-        handleEnemyMovement(&enemy, &enemyDirection);
+        // Power-up timer
+        if(powerUpTimer > 0) powerUpTimer -= GetFrameTime();
+    }
 
+    void Draw() const override {
+        DrawTextureRec(texture, frameRec, position, WHITE);
+    }
+
+    void ApplyPowerUp(PlayerState newState, float duration) {
+        state = newState;
+        powerUpTimer = duration;
+        // Apply effects based on state...
+    }
+
+    Vector2 GetPosition() const {
+        return position;
+    }
+
+    int GetScore() const {
+        return score;
+    }
+
+    int GetLives() const {
+        return lives;
+    }
+
+    void Reset() {
+        position = {400, 300};
+        state = PlayerState::NORMAL;
+        speed = 2.0f;
+        powerUpTimer = 0.0f;
+        coins = 0;
+        score = 0;
+        lives = 3;
+    }
+};
+
+class Enemy : public GameObject {
+protected:
+    Vector2 direction;
+    float speed;
+public:
+    virtual void AIUpdate(Vector2 playerPos) = 0;
+};
+
+class PatrolEnemy : public Enemy {
+public:
+    PatrolEnemy(Vector2 startPos, Texture2D tex) {
+        position = startPos;
+        texture = tex;
+        direction = {1, 0};
+        speed = 1.5f;
+    }
+
+    void Update() override {
+        position.x += direction.x * speed;
+        if(position.x < 40 || position.x > 760) direction.x *= -1;
+    }
+
+    void AIUpdate(Vector2 playerPos) override {
+        // Simple patrol AI
+    }
+
+    void Draw() const override {
+        DrawTextureV(texture, position, WHITE);
+    }
+};
+
+class ChasingEnemy : public Enemy {
+public:
+    ChasingEnemy(Vector2 startPos, Texture2D tex) {
+        position = startPos;
+        texture = tex;
+        speed = 2.0f;
+    }
+
+    void Update() override {
+        // Movement handled in AIUpdate
+    }
+
+    void AIUpdate(Vector2 playerPos) override {
+        Vector2 dir = Vector2Normalize(Vector2Subtract(playerPos, position));
+        position = Vector2Add(position, Vector2Scale(dir, speed));
+    }
+
+    void Draw() const override {
+        DrawTextureV(texture, position, RED);
+    }
+};
+
+class Game {
+    GameState state = GameState::MENU;
+    std::unique_ptr<Player> player;
+    std::vector<std::unique_ptr<Enemy>> enemies;
+    ParticleSystem particles;
+    Sound collectSound;
+    Music bgMusic;
+    int highScore = 0;
+    float gameTime = 120.0f;
+
+    void LoadGameData() {
+        std::ifstream saveFile("save.dat");
+        if(saveFile) saveFile >> highScore;
+    }
+
+public:
+    Game() {
+        InitWindow(800, 600, "Ultimate Pacman");
+        InitAudioDevice();
+
+        Texture2D playerTex = LoadTexture("assets/pacman_sheet.png");
+        player = std::make_unique<Player>(Vector2{400, 300}, playerTex);
+
+        enemies.push_back(std::make_unique<PatrolEnemy>(
+            Vector2{200, 200}, LoadTexture("assets/ghost1.png")));
+        enemies.push_back(std::make_unique<ChasingEnemy>(
+            Vector2{600, 400}, LoadTexture("assets/ghost2.png")));
+
+        collectSound = LoadSound("assets/collect.wav");
+        bgMusic = LoadMusicStream("assets/bg_music.mp3");
+        LoadGameData();
+    }
+
+    ~Game() {
+        UnloadSound(collectSound);
+        UnloadMusicStream(bgMusic);
+        CloseAudioDevice();
+        CloseWindow();
+    }
+
+    void Run() {
+        SetTargetFPS(60);
+        PlayMusicStream(bgMusic);
+
+        while (!WindowShouldClose()) {
+            UpdateMusicStream(bgMusic);
+            Update();
+            Draw();
+        }
+    }
+
+private:
+    void Update() {
+        switch(state) {
+            case GameState::MENU:
+                if(IsKeyPressed(KEY_ENTER)) {
+                    state = GameState::PLAYING;
+                    gameTime = 120.0f;
+                    player->Reset();
+                }
+                break;
+
+            case GameState::PLAYING:
+                player->Update();
+                for(auto& enemy : enemies) {
+                    enemy->AIUpdate(player->GetPosition());
+                    enemy->Update();
+                }
+                // Collision detection and other logic...
+                break;
+
+            // Handle other states...
+        }
+    }
+
+    void Draw() const {
         BeginDrawing();
-        ClearBackground((Color){40, 40, 40, 255});
+        ClearBackground(DARKBLUE);
 
-        for (int y = 0; y < TILE_COUNT_Y; y++) {
-            for (int x = 0; x < TILE_COUNT_X; x++) {
-                Color tileColor = ((x + y) % 2 == 0) ? DARKGRAY : LIGHTGRAY;
-                DrawRectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE, tileColor);
-                DrawRectangleLines(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE, GRAY);
+        // Draw game world
+        for(int x = 0; x < TILE_COUNT_X; x++) {
+            for(int y = 0; y < TILE_COUNT_Y; y++) {
+                if(x == 0 || x == TILE_COUNT_X-1 || y == 0 || y == TILE_COUNT_Y-1) {
+                    DrawRectangle(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE, BLUE);
+                }
             }
         }
 
-        for (int i = 0; i < itemCount; i++) {
-            if (!items[i].collected) {
-                DrawCircle(items[i].position.x + TILE_SIZE / 2, items[i].position.y + TILE_SIZE / 2, 10, YELLOW);
-            }
-        }
+        player->Draw();
+        for(const auto& enemy : enemies) enemy->Draw();
+        particles.Draw();
 
-        DrawTexture(currentTexture, logoPosition.x, logoPosition.y, WHITE);
-        DrawTexture(enemy.texture, enemy.position.x, enemy.position.y, RED);
-        DrawFPS(30, 30);
-        DrawText(TextFormat("Score: %i", score), 10, 10, 20, RAYWHITE);
+        // Draw HUD
+        DrawText(TextFormat("SCORE: %d", player->GetScore()), 20, 10, 20, YELLOW);
+        DrawText(TextFormat("LIVES: %d", player->GetLives()), 200, 10, 20, RED);
+        DrawText(TextFormat("TIME: %02d:%02d", 
+            static_cast<int>(gameTime)/60, static_cast<int>(gameTime)%60), 
+            400, 10, 20, SKYBLUE);
 
         EndDrawing();
     }
+};
 
-    UnloadTexture(textureW);
-    UnloadTexture(textureA);
-    UnloadTexture(textureS);
-    UnloadTexture(textureD);
-    UnloadSound(collectSound);
-    UnloadSound(hitSound);
-    CloseWindow();
+int main() {
+    Game game;
+    game.Run();
     return 0;
 }
