@@ -215,8 +215,8 @@ public:
         enemies.push_back(std::make_unique<ChasingEnemy>(
             Vector2{600, 400}, LoadTexture("assets/sefidghost.png")));
 
-        collectSound = LoadSound("assets/collect.wav");
-        bgMusic = LoadMusicStream("assets/bg_music.mp3");
+        collectSound = LoadSound("assets/collect.mp3");
+        bgMusic = LoadMusicStream("assets/playing-pac-man-6783.mp3");
         LoadGameData();
     }
 
