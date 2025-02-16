@@ -207,13 +207,13 @@ public:
         InitWindow(800, 600, "Ultimate Pacman");
         InitAudioDevice();
 
-        Texture2D playerTex = LoadTexture("assets/pacman_sheet.png");
+        Texture2D playerTex = LoadTexture("assets/4.png");
         player = std::make_unique<Player>(Vector2{400, 300}, playerTex);
 
         enemies.push_back(std::make_unique<PatrolEnemy>(
-            Vector2{200, 200}, LoadTexture("assets/ghost1.png")));
+            Vector2{200, 200}, LoadTexture("assets/blueghost.png")));
         enemies.push_back(std::make_unique<ChasingEnemy>(
-            Vector2{600, 400}, LoadTexture("assets/ghost2.png")));
+            Vector2{600, 400}, LoadTexture("assets/sefidghost.png")));
 
         collectSound = LoadSound("assets/collect.wav");
         bgMusic = LoadMusicStream("assets/bg_music.mp3");
